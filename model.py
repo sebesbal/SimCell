@@ -1,6 +1,7 @@
 from math import sqrt
 
 import torch
+import torch.nn.functional as F
 
 
 class Model(torch.nn.Module):
@@ -11,11 +12,11 @@ class Model(torch.nn.Module):
         num_in = 2 * (node_features_count + 2) + edge_features_count + 1
         num_out = 2 * node_features_count + edge_features_count
         self.linear_1 = torch.nn.Linear(num_in, num_in)
-        self.linear_1.weight.detach().normal_(0.0, 0.1)
-        self.linear_1.bias.detach().zero_()
+        # self.linear_1.weight.detach().normal_(0.0, 0.1)
+        # self.linear_1.bias.detach().zero_()
         self.linear_2 = torch.nn.Linear(num_in, num_out)
-        self.linear_2.weight.detach().normal_(0.0, 0.1)
-        self.linear_2.bias.detach().zero_()
+        # self.linear_2.weight.detach().normal_(0.0, 0.1)
+        # self.linear_2.bias.detach().zero_()
 
     def forward(self, a, e):
         b = e.node
@@ -25,10 +26,10 @@ class Model(torch.nn.Module):
                        b.data, b.material.view(1), b.influx.view(1), e.data), 0)
         x = self.linear_1(x)
         x = self.linear_2(x)
-        x = torch.sigmoid(x)
+        # x = F.sigmoid(x)
         n = self.node_features_count
-        a_data = x[0:n]
-        b_data = x[n:2*n]
+        a_data = x[0:n].clone()
+        b_data = x[n:2*n].clone()
         e_data = x[2*n:]
         return a_data, b_data, e_data
 

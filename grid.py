@@ -1,16 +1,14 @@
-import numpy as np
 import torch
 import torch.nn.functional as F
-from numpy.random import rand
 
 
 class Node:
-    def __init__(self, id, data):
+    def __init__(self, id, data, material):
         self.id = id
-        self.edges = []   # list of tuples: (node, flux, off_i, off_j)
+        self.edges = []  # list of tuples: (node, flux, off_i, off_j)
         self.influx = None
         self.data = data
-        self.material = torch.tensor(0.0, requires_grad=True)
+        self.material = material
 
 
 class Edge:
@@ -21,13 +19,15 @@ class Edge:
         self.data = data
 
 
-class Grid:
+class Grid(torch.nn.Module):
     def __init__(self, row_count, col_count, model, optimizer):
+        super().__init__()
         self.row_count = row_count
         self.col_count = col_count
         self.node_count = row_count * col_count
-        self.iterations = row_count + col_count
-        self.consumed_material = torch.tensor(0.0, requires_grad=True)
+        self.model_iteration_count = row_count + col_count
+        self.transport_iteration_count = row_count + col_count
+        self.consumed_material = torch.tensor(0.0)
         self.rows = []
         self.nodes = []
         self.model = model
@@ -40,7 +40,7 @@ class Grid:
         for row in range(self.row_count):
             row_nodes = []
             for col in range(self.col_count):
-                node = Node(id, torch.zeros(self.model.node_features_count))
+                node = Node(id, torch.zeros(self.model.node_features_count), torch.tensor(0.0))
                 row_nodes.append(node)
                 self.nodes.append(node)
                 id += 1
@@ -49,7 +49,6 @@ class Grid:
         for row in range(self.row_count):
             for col in range(self.col_count):
                 node = self.rows[row][col]
-                node.edges.append(Edge(node, 0, 0, torch.zeros(self.model.edge_features_count)))
                 for i in [-1, 0, 1]:
                     for j in [-1, 0, 1]:
                         row2 = row + i
@@ -61,84 +60,91 @@ class Grid:
     def _init_flux(self):
         influxes = torch.rand(self.node_count)
         average = sum(influxes) / self.node_count
+        consume = 0.0
         for i, node in enumerate(self.nodes):
             node.influx = influxes[i] - average
+            if node.influx > 0:
+                consume += node.influx.item()
+        print(f"max reward: {consume * self.transport_iteration_count}")
 
-    def _apply_model(self):
+    def _model_iterations(self):
+        for time in range(self.model_iteration_count):
+            self._model_iteration()
+
+    def _transport_iterations(self):
+        for time in range(self.transport_iteration_count):
+            self._produce_material()
+            self._transport_iteration()
+            self._consume_material()
+
+    def _model_iteration(self):
         data_size = self.nodes[0].data.size(0)
-        # weights = torch.zeros(self.node_count, requires_grad=True)
-        weights = []
-        new_node_data = []
-        for _ in range(self.node_count):
-            weights.append(torch.tensor(0.0, requires_grad=True))
-            new_node_data.append(torch.tensor(0.0, requires_grad=True))
-        # weights = [None] * self.node_count
-        # new_node_data = torch.zeros((self.node_count, data_size), requires_grad=True)
-
-        # new_node_data = []
-        # for i in range(self.node_count):
-        #    new_node_data.append(torch.zeros(data_size))
+        for a in self.nodes:
+            a.weights = torch.tensor(0.0)
+            a.new_data = torch.zeros(data_size)
 
         for a in self.nodes:
-            # fluxes = torch.zeros(len(a.edges), requires_grad=True)
-            fluxes = []
+            fluxes = torch.zeros(len(a.edges))
             for i, e in enumerate(a.edges):
                 b = e.node
-                data_a, data_b, e.data = self.model(a, e)
-                fluxes.append(F.relu(e.data[0]))
-                weight_a = F.relu(data_a[0])
-                weight_b = F.relu(data_b[0])
-                weights[a.id].add_(weight_a)
-                weights[b.id].add_(weight_b)
-                new_node_data[a.id].add_(data_a * weight_a)
-                new_node_data[b.id].add_(data_b * weight_b)
+                da, db, e.data = self.model(a, e)
+                fluxes[i] = F.relu(e.data[0])
+                weight_a = F.relu(da[0])
+                weight_b = F.relu(db[0])
+                a.new_data += da * weight_a
+                b.new_data += db * weight_b
+                a.weights += weight_a
+                b.weights += weight_b
+
+            fluxes = F.softmax(fluxes, dim=0)
             for i, e in enumerate(a.edges):
                 e.data[0] = fluxes[i]
 
-        for i, a in enumerate(self.nodes):
-            a.data = new_node_data[i] / torch.clamp(weights[i], min=0.000001)
-
-    def _move_material(self):
-        new_material = torch.zeros(self.node_count)
         for a in self.nodes:
-            material = a.material
+            a.data = a.new_data / torch.clamp(a.weights, min=0.000001)
+
+    def _transport_iteration(self):
+        for a in self.nodes:
+            a.new_material = torch.tensor(0.0)
+        for a in self.nodes:
             for e in a.edges:
                 b = e.node
-                new_material[b.id] += e.data[0] * material
+                b.new_material += e.data[0] * a.material
         for i, a in enumerate(self.nodes):
-            a.material = new_material[i]
+            a.material = a.new_material
 
     def _produce_material(self):
         for a in self.nodes:
-            if a.influx > 0:
-                a.material.add_(a.influx)
+            a.material += F.relu(a.influx)
 
     def _consume_material(self):
         for a in self.nodes:
-            if a.influx < 0:
-                consumed = min(a.material, -a.influx)
-                a.material -= consumed
-                self.consumed_material.add_(consumed)
+            consumed = torch.minimum(a.material, F.relu(-a.influx))
+            a.material = a.material + consumed
+            self.consumed_material = self.consumed_material + consumed
+
+    def forward(self):
+        self._model_iterations()
+        self._transport_iterations()
 
     def run(self):
         with torch.autograd.set_detect_anomaly(True):
             while True:
+                self.consumed_material = torch.tensor(0.0)
                 self.optimizer.zero_grad()
                 self.model.train()
-                self.consumed_material = torch.tensor(0.0, requires_grad=True)
-                for _ in range(self.iterations):
-                    self._apply_model()
+                self()
 
-                for _ in range(self.iterations):
-                    self._produce_material()
-                    self._move_material()
-                    self._consume_material()
-
-                print(f"consumed_material: {self.consumed_material.item()}")
+                print(f"reward: {self.consumed_material.item()}")
                 loss = -self.consumed_material
                 loss.backward()
                 # F.nll_loss(model()[data.train_mask], data.y[data.train_mask]).backward()
                 self.optimizer.step()
+                for a in self.nodes:
+                    a.material = a.material.detach()
+                    a.data = a.data.detach()
+                    for e in a.edges:
+                        e.data = e.data.detach()
 
     def print_data(self):
         for row in self.rows:
