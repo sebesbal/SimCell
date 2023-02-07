@@ -26,10 +26,10 @@ class Model(torch.nn.Module):
                        b.data, b.material.view(1), b.influx.view(1), e.data), 0)
         x = self.linear_1(x)
         x = self.linear_2(x)
-        # x = F.sigmoid(x)
+        x = torch.sigmoid(x)
         n = self.node_features_count
         a_data = x[0:n].clone()
         b_data = x[n:2*n].clone()
-        e_data = x[2*n:]
+        e_data = x[2*n:].clone()
         return a_data, b_data, e_data
 

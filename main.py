@@ -7,7 +7,7 @@ from model import Model
 def test_grid():
     model = Model(5, 5)
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
-    grid = Grid(3, 3, model, optimizer)
+    grid = Grid(4, 4, model, optimizer)
     grid.run()
 
 

@@ -1,3 +1,5 @@
+from random import randint
+
 import torch
 import torch.nn.functional as F
 
@@ -33,7 +35,7 @@ class Grid(torch.nn.Module):
         self.model = model
         self.optimizer = optimizer
         self._init_nodes()
-        self._init_flux()
+        self._init_flux2(2)
 
     def _init_nodes(self):
         id = 0
@@ -66,6 +68,35 @@ class Grid(torch.nn.Module):
             if node.influx > 0:
                 consume += node.influx.item()
         print(f"max reward: {consume * self.transport_iteration_count}")
+
+    def _init_flux2(self, count):
+        print(f"max reward: {count * self.transport_iteration_count}")
+        for node in self.nodes:
+            node.influx = torch.tensor(0.0)
+
+        used = set()
+
+        for _ in range(count):
+            while True:
+                row = randint(0, self.row_count - 1)
+                col = randint(0, self.col_count - 1)
+                node = self.rows[row][col]
+                if node not in used:
+                    node.influx = torch.tensor(1.0)
+                    used.add(node)
+                    print(f"({row}, {col}) = 1")
+                    break
+
+        for _ in range(count):
+            while True:
+                row = randint(0, self.row_count - 1)
+                col = randint(0, self.col_count - 1)
+                node = self.rows[row][col]
+                if node not in used:
+                    node.influx = torch.tensor(-1.0)
+                    used.add(node)
+                    print(f"({row}, {col}) = -1")
+                    break
 
     def _model_iterations(self):
         for time in range(self.model_iteration_count):
@@ -138,7 +169,6 @@ class Grid(torch.nn.Module):
                 print(f"reward: {self.consumed_material.item()}")
                 loss = -self.consumed_material
                 loss.backward()
-                # F.nll_loss(model()[data.train_mask], data.y[data.train_mask]).backward()
                 self.optimizer.step()
                 for a in self.nodes:
                     a.material = a.material.detach()
