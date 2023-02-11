@@ -49,9 +49,9 @@ class Grid(torch.nn.Module):
         self.optimizer = optimizer
         self.max_reward = 0.0
         self._init_nodes()
-        self._init_flux()
-        # self._init_flux2(prod_count)
-        print(f"max reward: {self.max_reward}")
+        # self._init_flux()
+        self._init_flux2(prod_count)
+        # print(f"max reward: {self.max_reward}")
 
     def _init_nodes(self):
         id = 0
@@ -83,10 +83,10 @@ class Grid(torch.nn.Module):
             node.influx = influxes[i] - average
             if node.influx > 0:
                 consume += node.influx.item()
-        self.max_reward = consume * self.transport_iteration_count
+        self.max_reward = consume
 
     def _init_flux2(self, count):
-        self.max_reward = count * self.transport_iteration_count
+        self.max_reward = count
         for node in self.nodes:
             node.influx = torch.tensor(0.0)
 
@@ -119,10 +119,10 @@ class Grid(torch.nn.Module):
             self._model_iteration()
 
     def _transport_iterations(self):
+        self._produce_material()
         for time in range(self.transport_iteration_count):
-            self._produce_material()
             self._transport_iteration()
-            self._consume_material()
+        # self._consume_material()
 
     def _model_iteration(self):
         data_size = self.nodes[0].data.size(0)
@@ -158,8 +158,16 @@ class Grid(torch.nn.Module):
             for e in a.edges:
                 b = e.node
                 transported_material = e.data[0] * a.material
+                if a == b:
+                    new_full_consumed = torch.minimum(a.consumed_material + transported_material, F.relu(-a.influx))
+                    consumed = new_full_consumed - a.consumed_material
+                    transported_material = transported_material - consumed
+                    a.consumed_material = new_full_consumed
+                    self.consumed_material = self.consumed_material + consumed
+                else:
+                    b.new_material += transported_material
+
                 e.transported_material += transported_material
-                b.new_material += transported_material
                 fuel_cost = transported_material * (e.length + a.fuel_cost)
                 b.new_fuel_cost += fuel_cost
                 self.fuel_cost += fuel_cost
@@ -183,9 +191,9 @@ class Grid(torch.nn.Module):
         self._model_iterations()
         self._transport_iterations()
 
-    def run(self):
+    def run(self, print_stats=False):
         with torch.autograd.set_detect_anomaly(False):
-            for i in range(20):
+            for i in range(1):
                 self.consumed_material = torch.tensor(0.0)
                 self.fuel_cost = torch.tensor(0.0)
                 self.optimizer.zero_grad()
@@ -194,16 +202,17 @@ class Grid(torch.nn.Module):
 
                 # print(f"reward: {100 * self.consumed_material.item() / self.max_reward}%")
 
-                loss = - (5 * self.consumed_material - self.fuel_cost)
+                loss = - (self.consumed_material - 0.1 * self.fuel_cost)
 
-                print(f"consumed: {100 * self.consumed_material.item() / self.max_reward:.2f}%"
-                      f",  fuel_cost: {self.fuel_cost:.2f},  reward: {-loss:.2f}")
+                if print_stats:
+                    print(f"consumed: {100 * self.consumed_material.item() / self.max_reward:.2f}%"
+                          f",  fuel_cost: {self.fuel_cost:.2f},  reward: {-loss:.2f}")
+                    self.draw_state()
 
                 loss.backward()
                 self.optimizer.step()
 
                 full_material = 0.0
-                self.draw_state()
                 for a in self.nodes:
                     full_material += a.material
                     a.material = a.material.detach()
@@ -224,7 +233,7 @@ class Grid(torch.nn.Module):
 
                 if msvcrt.kbhit():
                     print("you pressed", msvcrt.getch(), "so now i will quit")
-        torch.save(self.model.state_dict(), 'SimCell.p')
+        # torch.save(self.model.state_dict(), 'SimCell.p')
 
     def print_data(self):
         for row in self.rows:
@@ -232,22 +241,10 @@ class Grid(torch.nn.Module):
                 print(f'( {node.id}: ' + ', '.join([f'[{e.node.id}, {e.i}, {e.j}]' for e in node.edges]) + ')', end=' ')
             print()
 
-    def draw_state(self):
-        # for i in range(10):
-        #     img = PIL.Image.new(mode="RGB", size=(200, 200))
-        #     draw = PIL.ImageDraw.Draw(img)
-        #     draw.line((10*i, 0) + img.size, fill=128)
-        #     draw.line((0, img.size[1], img.size[0], 0), fill=128)
-        #     # img.show('fasza')
-        #     plt.ion()
-        #     plt.imshow(img)
-        #     plt.show()
-        #     # sleep(0.2)
-        #     plt.pause(0.01)
-        #     plt.clf()  # will make the plot window empty
-        #     # plt.close()
-        #     img.close()
+    def print_stats(self):
+        pass
 
+    def draw_state(self):
         plt.ion()
         plt.clf()
         a = 100  # cell size
@@ -260,7 +257,7 @@ class Grid(torch.nn.Module):
                 xv = x + a/2
                 yv = y + a/2
                 if node.influx < 0:
-                    v = int(- 255 * node.consumed_material / (self.transport_iteration_count * node.influx))
+                    v = int(- 255 * node.consumed_material / node.influx)
                     draw.rectangle((x, y, x + a, y + a), fill=(v, v, v))
 
                 for e in node.edges:
