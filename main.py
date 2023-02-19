@@ -5,7 +5,7 @@ import torch
 from torch import optim
 from tqdm import tqdm
 
-from grid import Grid
+from grid_nn import GridNN
 from model import Model
 
 
@@ -17,8 +17,8 @@ def test_grid():
     optimizer = optim.Adam(model.parameters())  # , lr=0.01)  #, betas=(0.999, 0.999))
     for i in range(30):
         size = 2 + i // 10
-        prod = size - 1
-        grid = Grid(size, size, prod, model, optimizer)
+        grid = GridNN(size, size, size - 1, model, optimizer)
+        grid.init_flux()
         grid.draw_state()
         grid.run()
 
@@ -35,8 +35,7 @@ def test_grid2():
     grids = []
     for size in range(min_size, max_size + 1):
         for i in range(50):
-            prod = size - 1
-            grid = Grid(size, size, prod, model, optimizer)
+            grid = GridNN(size, size, size - 1, model, optimizer)
             grids.append(grid)
 
     random.shuffle(grids)
