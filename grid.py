@@ -49,8 +49,8 @@ class Grid(torch.nn.Module):
         self.optimizer = optimizer
         self.max_reward = 0.0
         self._init_nodes()
-        # self._init_flux()
-        self._init_flux2(prod_count)
+        self._init_flux()
+        # self._init_flux2(prod_count)
         # print(f"max reward: {self.max_reward}")
 
     def _init_nodes(self):
@@ -136,16 +136,43 @@ class Grid(torch.nn.Module):
                 b = e.node
                 da, db, e.data = self.model(a, e)
                 fluxes[i] = F.relu(e.data[0])
-                weight_a = F.relu(da[0])
-                weight_b = F.relu(db[0])
-                a.new_data += da * weight_a
-                b.new_data += db * weight_b
-                a.weights += weight_a
-                b.weights += weight_b
+                # weight_a = F.relu(da[0])
+                # weight_b = F.relu(db[0])
+                # a.new_data += da * weight_a
+                # b.new_data += db * weight_b
+                # a.weights += weight_a
+                # b.weights += weight_b
+                a.new_data = torch.maximum(a.new_data, da)
+                b.new_data = torch.maximum(b.new_data, db)
 
             fluxes = F.softmax(fluxes, dim=0)
             for i, e in enumerate(a.edges):
                 e.data[0] = fluxes[i]
+
+        for a in self.nodes:
+            a.data = a.new_data  # / torch.clamp(a.weights, min=0.000001)
+
+    def _model_iteration2(self):
+        data_size = self.nodes[0].data.size(0)
+        for a in self.nodes:
+            a.weights = torch.tensor(0.0)
+            a.new_data = torch.zeros(data_size)
+
+        for a in self.nodes:
+            fluxes = torch.zeros(len(a.edges))
+            for i, e in enumerate(a.edges):
+                b = e.node
+                db, e.data = self.model(a, e)
+                fluxes[i] = F.relu(e.data[0])
+                # b.new_data = torch.maximum(b.new_data, db)
+                weight_b = F.relu(db[0])
+                b.new_data += db * weight_b
+                b.weights += weight_b
+
+            fluxes = F.softmax(fluxes, dim=0)
+            for i, e in enumerate(a.edges):
+                e.data[0]\
+                    = fluxes[i]
 
         for a in self.nodes:
             a.data = a.new_data / torch.clamp(a.weights, min=0.000001)
@@ -191,7 +218,7 @@ class Grid(torch.nn.Module):
         self._model_iterations()
         self._transport_iterations()
 
-    def run(self, print_stats=False):
+    def run(self, backprop, print_stats):
         with torch.autograd.set_detect_anomaly(False):
             for i in range(1):
                 self.consumed_material = torch.tensor(0.0)
@@ -209,8 +236,15 @@ class Grid(torch.nn.Module):
                           f",  fuel_cost: {self.fuel_cost:.2f},  reward: {-loss:.2f}")
                     self.draw_state()
 
-                loss.backward()
-                self.optimizer.step()
+                if self.optimizer.loss is None:
+                    self.optimizer.loss = loss
+                else:
+                    self.optimizer.loss += loss
+
+                if backprop:
+                    self.optimizer.loss.backward()
+                    self.optimizer.step()
+                    self.optimizer.loss = None
 
                 full_material = 0.0
                 for a in self.nodes:
