@@ -133,13 +133,21 @@ class Grid(torch.nn.Module):
                     v = int(- 255 * node.consumed_material / node.influx)
                     draw.rectangle((x, y, x + a, y + a), fill=(v, v, v))
 
-                for e in node.edges:
-                    weight = e.transported_material
-                    draw.line((xv, yv, xv + a/4*e.i, yv + a/4*e.j),
-                              (100, 100, int(weight * 255)), int(10 * weight))
-
                 m = int(a * 0.4)
                 r = (x + m, y + m, x + a - m, y + a - m)
+                m2 = int(a * 0.3)
+                r2 = (x + m2, y + m2, x + a - m2, y + a - m2)
+
+                for e in node.edges:
+                    weight = e.transported_material
+
+                    if e.transport_cost > 0.0:
+                        draw.line((xv, yv, xv + a/4*e.i, yv + a/4*e.j),
+                                  (100, 100, int(weight * 255)), int(10 * weight))
+                    else:
+                        if weight > 0:
+                            draw.rectangle(r2, fill=(100, 100, int(weight * 255)))
+
                 if node.influx < 0:
                     draw.rectangle(r, fill=(int(- 255 * node.influx), 0, 0))
                 elif node.influx > 0:
