@@ -45,7 +45,7 @@ class GridNN(Grid):
         for a in self.nodes:
             fluxes = torch.zeros(len(a.edges))
             for i, e in enumerate(a.edges):
-                b = e.node
+                b = e.dst
                 da, db, e.data = self.model(a, e)
                 fluxes[i] = F.relu(e.data[0])
                 # weight_a = F.relu(da[0])
@@ -73,7 +73,7 @@ class GridNN(Grid):
         for a in self.nodes:
             fluxes = torch.zeros(len(a.edges))
             for i, e in enumerate(a.edges):
-                b = e.node
+                b = e.dst
                 db, e.data = self.model(a, e)
                 fluxes[i] = F.relu(e.data[0])
                 # b.new_data = torch.maximum(b.new_data, db)
@@ -95,7 +95,7 @@ class GridNN(Grid):
             a.new_fuel_cost = torch.tensor(0.0)
         for a in self.nodes:
             for e in a.edges:
-                b = e.node
+                b = e.dst
                 transported_material = e.data[0] * a.material
                 if a == b:
                     new_full_consumed = torch.minimum(a.consumed_material + transported_material, F.relu(-a.influx))
@@ -107,7 +107,7 @@ class GridNN(Grid):
                     b.new_material += transported_material
 
                 e.transported_material += transported_material
-                fuel_cost = transported_material * (e.length + a.fuel_cost)
+                fuel_cost = transported_material * (e.transport_cost + a.fuel_cost)
                 b.new_fuel_cost += fuel_cost
                 self.fuel_cost += fuel_cost
         for i, a in enumerate(self.nodes):

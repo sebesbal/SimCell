@@ -18,12 +18,13 @@ class Node:
 
 
 class Edge:
-    def __init__(self, node, i, j):
-        self.node = node
+    def __init__(self, source_node, dst_node, i, j):
+        self.src = source_node
+        self.dst = dst_node
         self.i = i
         self.j = j
         self.transported_material = torch.tensor(0.0)
-        self.length = torch.tensor(sqrt(i * i + j * j))
+        self.transport_cost = torch.tensor(sqrt(i * i + j * j))
 
 
 class Grid(torch.nn.Module):
@@ -41,11 +42,11 @@ class Grid(torch.nn.Module):
         else:
             self._init_flux()
 
+    def _create_edge(self, a, b, i, j):
+        return Edge(a, b, i, j)
+
     def _create_node(self, id):
         return Node(id)
-
-    def _create_edge(self, node, i, j):
-        return Edge(node, i, j)
 
     def _init_nodes(self):
         id = 0
@@ -66,7 +67,7 @@ class Grid(torch.nn.Module):
                         row2 = row + i
                         col2 = col + j
                         if 0 <= row2 < self.row_count and 0 <= col2 < self.col_count:
-                            node.edges.append(self._create_edge(self.rows[row2][col2], i, j))
+                            node.edges.append(self._create_edge(node, self.rows[row2][col2], i, j))
 
     def _init_flux(self):
         influxes = torch.rand(self.node_count)
@@ -110,7 +111,7 @@ class Grid(torch.nn.Module):
     def print_data(self):
         for row in self.rows:
             for node in row:
-                print(f'( {node.id}: ' + ', '.join([f'[{e.node.id}, {e.i}, {e.j}]' for e in node.edges]) + ')', end=' ')
+                print(f'( {node.id}: ' + ', '.join([f'[{e.dst.id}, {e.i}, {e.j}]' for e in node.edges]) + ')', end=' ')
             print()
 
     def print_stats(self):

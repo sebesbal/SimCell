@@ -28,14 +28,14 @@ class Model(torch.nn.Module):
         self.linear_2_2.bias.detach().zero_()
 
     def forward(self, a, e):
-        b = e.node
+        b = e.dst
         # r = torch.tensor(float(e.i * e.i + e.j * e.j))
-        r = e.length
+        r = e.transport_cost
 
         x = torch.cat((r.view(1), a.data, a.material.view(1), a.influx.view(1),
                        b.data, b.material.view(1), b.influx.view(1), e.data), 0)
 
-        if a == e.node:
+        if a == e.dst:
             x = self.linear_1(x)
             x = torch.relu(x)
             x = self.linear_2(x)
