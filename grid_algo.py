@@ -10,7 +10,7 @@ from utils import print_indented
 class Trader:
     min_price = 1.0     # minimum possible price
     max_price = 100.0   # maximum possible price
-    price_step = 1.0    # prices can be changed by this step
+    price_step = 0.2    # prices can be changed by this step
     # vol_step = 1.0      # vols can be changed by this step
     vol_step = 0.2      # vols can be changed by this step
     step_delay = 3      # changes are triggered when there is no trade for step_delay steps
@@ -253,6 +253,21 @@ class NodeAlgo(Node):
         print_indented(indent, "candidate:")
         self.candidate.print_state(indent+1)
 
+    def route_is_valid(self):
+        node = self
+        nodes = set()
+        seller = self.candidate.seller
+        while True:
+            nodes.add(node)
+            next_node = node.candidate.edge.dst
+            if node == next_node:
+                return True
+            if next_node.candidate.seller != seller:
+                return False
+            if next_node in nodes:
+                return False
+            node = next_node
+
 
 class Route:
     def __init__(self):
@@ -323,9 +338,9 @@ class GridAlgo(Grid):
         for b in self.buyers:
             node = b.node
             c = node.candidate
-            if c.current_vol() > 0 and (c.current_price() < b.price or c.current_price() < b.worst_price()):
-                # if c.current_vol() > 0 and c.current_price() < b.worst_price():
-                # seller price < buyer price
+            if c.current_vol() > 0 \
+                    and (c.current_price() < b.price or c.current_price() < b.worst_price()) \
+                    and node.route_is_valid():
                 route = Route()
                 b.add_route(route)
 
