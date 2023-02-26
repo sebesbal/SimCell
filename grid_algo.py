@@ -115,7 +115,8 @@ class Buyer(Trader):
         route.transport_cost = candidate.transport_cost
 
         Trader.add_route(self, route)
-        route.dst_price = self.price
+        # route.dst_price = self.price
+        route.dst_price = candidate.current_price()
         route.buyer = self
         route.grow(self.node)
 
@@ -143,6 +144,12 @@ class Buyer(Trader):
 
     def route_score(self, route):
         return -route.dst_price
+
+    def worst_price(self):
+        if len(self.routes) > 0:
+            return self.routes[0].dst_price
+        else:
+            return self.max_price
 
 
 class Transport:
@@ -316,7 +323,8 @@ class GridAlgo(Grid):
         for b in self.buyers:
             node = b.node
             c = node.candidate
-            if c.current_vol() > 0 and c.current_price() < b.price:
+            if c.current_vol() > 0 and (c.current_price() < b.price or c.current_price() < b.worst_price()):
+                # if c.current_vol() > 0 and c.current_price() < b.worst_price():
                 # seller price < buyer price
                 route = Route()
                 b.add_route(route)
