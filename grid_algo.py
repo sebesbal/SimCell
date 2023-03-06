@@ -10,7 +10,8 @@ from utils import print_indented
 class Trader:
     min_price = 1.0     # minimum possible price
     max_price = 100.0   # maximum possible price
-    price_step = 0.2    # prices can be changed by this step
+    price_step = 0.1    # prices can be changed by this step
+    big_price_step = 1.0    # prices can be changed by this step
     # vol_step = 1.0      # vols can be changed by this step
     vol_step = 0.2      # vols can be changed by this step
     step_delay = 3      # changes are triggered when there is no trade for step_delay steps
@@ -44,6 +45,7 @@ class Trader:
         # self.vol = self.max_vol - self.traded_vol   # the new vol is the remaining capacity of the trader
         # if self.vol == 0:
         #     self.vol = self.routes[0].vol   # the new vol is the vol of the worst route (that we want to replace)
+        # self.vol = max(Trader.vol_step, self.max_vol - self.traded_vol)
         self.counter = 0
 
     def remove_route(self, route):
@@ -102,9 +104,13 @@ class Seller(Trader):
     #     self.counter += 1
 
     def update_price(self):
-        if self.traded_vol < self.max_vol:
+        if self.traded_vol == 0:
+            self.price -= Trader.big_price_step
+        elif self.traded_vol < self.max_vol:
             # self.price = self.min_price
             self.price -= Trader.price_step
+        # if self.traded_vol < self.max_vol:
+        #     self.price -= (self.max_vol - self.traded_vol) / self.max_vol
         else:
             self.price = self.worst_price() + self.price_step
         # self.price = max(Trader.min_price, min(Trader.max_price, self.price))
@@ -345,12 +351,14 @@ class GridAlgo(Grid):
             if n.influx > 0:
                 seller = Seller()
                 seller.max_vol = float(n.influx)
+                # seller.vol = seller.max_vol
                 seller.node = n
                 n.seller = seller
                 self.sellers.append(seller)
             elif n.influx < 0:
                 buyer = Buyer()
                 buyer.max_vol = float(-n.influx)
+                # buyer.vol = buyer.max_vol
                 buyer.node = n
                 n.buyer = buyer
                 self.buyers.append(buyer)
