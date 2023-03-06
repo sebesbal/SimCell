@@ -80,29 +80,44 @@ class Seller(Trader):
         route.src_price = self.price
         route.seller = self
 
+    # def update_price(self):
+    #     if self.counter > Trader.step_delay:
+    #         # there was no trade for step_delay turns
+    #         if self.traded_vol < self.max_vol:
+    #             # we need to trade more, we can go below the worst current trade
+    #             self.price -= Trader.price_step
+    #         else:
+    #             # we are at full capacity, we don't want to go below the worst trade
+    #             self.price = self.worst_price() + Trader.price_step
+    #     else:
+    #         # there was a recent trade
+    #         if self.traded_vol < self.max_vol:
+    #             # we need to trade more, don't be greedy
+    #             pass
+    #         else:
+    #             # # we are at full capacity, we can increase the price
+    #             # self.price += Trader.price_step
+    #             self.price = self.worst_price() + Trader.price_step
+    #     self.price = max(Trader.min_price, min(Trader.max_price, self.price))
+    #     self.counter += 1
+
     def update_price(self):
-        if self.counter > Trader.step_delay:
-            # there was no trade for step_delay turns
-            if self.traded_vol < self.max_vol:
-                # we need to trade more, we can go below the worst current trade
-                if self.price > Trader.min_price:
-                    self.price -= Trader.price_step
-            else:
-                # we are at full capacity, we don't want to go below the worst trade
-                if self.price > self.routes[0].src_price:
-                    self.price -= Trader.price_step
+        if self.traded_vol < self.max_vol:
+            # self.price = self.min_price
+            self.price -= Trader.price_step
         else:
-            # there was a recent trade
-            if self.traded_vol < self.max_vol:
-                # we need to trade more, don't be greedy
-                pass
-            else:
-                # we are at full capacity, we can increase the price
-                self.price += Trader.price_step
+            self.price = self.worst_price() + self.price_step
+        # self.price = max(Trader.min_price, min(Trader.max_price, self.price))
         self.counter += 1
 
     def route_score(self, route):
         return route.src_price
+
+    def worst_price(self):
+        if len(self.routes) > 0:
+            return self.routes[0].src_price
+        else:
+            return self.max_price
 
 
 class Buyer(Trader):
@@ -120,26 +135,35 @@ class Buyer(Trader):
         route.buyer = self
         route.grow(self.node)
 
+    # def update_price(self):
+    #     if self.counter > Trader.step_delay:
+    #         # there was no trade for step_delay turns
+    #         if self.traded_vol < self.max_vol:
+    #             # we still need to trade more --> increase the price
+    #             self.price += Trader.price_step
+    #         else:
+    #             # we are at full capacity, we don't want to go above the worst route
+    #             self.price = self.worst_price() - Trader.price_step
+    #     else:
+    #         # there was a recent trade
+    #         if self.traded_vol < self.max_vol:
+    #             # we still need to trade more, don't be greedy
+    #             pass
+    #         else:
+    #             # # we are at full capacity --> we can lower the price
+    #             # self.price -= Trader.price_step
+    #             # we are at full capacity, we don't want to go above the worst route
+    #             self.price = self.worst_price() - Trader.price_step
+    #     self.price = max(Trader.min_price, min(Trader.max_price, self.price))
+    #     self.counter += 1
+
     def update_price(self):
-        if self.counter > Trader.step_delay:
-            # there was no trade for step_delay turns
-            if self.traded_vol < self.max_vol:
-                # we still need to trade more --> increase the price
-                if self.price < Trader.max_price:
-                    self.price += Trader.price_step
-            else:
-                # we are at full capacity, we don't want to go above the worst route
-                if self.routes[0].dst_price > self.price:
-                    self.price += Trader.price_step
-        else:
-            # there was a recent trade
-            if self.traded_vol < self.max_vol:
-                # we still need to trade more, don't be greedy
-                pass
-            else:
-                # we are at full capacity --> we can lower the price
-                if self.price > Trader.min_price:
-                    self.price -= Trader.price_step
+        self.price = -1  # not used
+        # if self.traded_vol < self.max_vol:
+        #     self.price += Trader.price_step
+        # else:
+        #     self.price = self.worst_price() - Trader.price_step
+        # self.price = max(Trader.min_price, min(Trader.max_price, self.price))
         self.counter += 1
 
     def route_score(self, route):
@@ -338,8 +362,9 @@ class GridAlgo(Grid):
         for b in self.buyers:
             node = b.node
             c = node.candidate
+            # and (c.current_price() < b.price or c.current_price() < b.worst_price()) \
             if c.current_vol() > 0 \
-                    and (c.current_price() < b.price or c.current_price() < b.worst_price()) \
+                    and (b.traded_vol < b.max_vol or c.current_price() < b.worst_price()) \
                     and node.route_is_valid():
                 route = Route()
                 b.add_route(route)
