@@ -16,6 +16,12 @@ class Node:
         self.fuel_cost = torch.tensor(0.0)
         self.consumed_material = torch.tensor(0.0)
 
+    def get_edge_to(self, node):
+        for e in self.edges:
+            if e.dst == node:
+                return e
+        return None
+
 
 class Edge:
     def __init__(self, source_node, dst_node, i, j):
@@ -129,9 +135,12 @@ class Grid(torch.nn.Module):
                 y = j * a
                 xv = x + a/2
                 yv = y + a/2
-                if node.influx < 0:
-                    v = int(- 255 * node.consumed_material / node.influx)
-                    draw.rectangle((x, y, x + a, y + a), fill=(v, v, v))
+                # if node.influx < 0:
+                #     v = int(- 255 * node.consumed_material / node.influx)
+                #     draw.rectangle((x, y, x + a, y + a), fill=(v, v, v))
+
+                # v = int(- 255 * node.consumed_material / node.influx)
+                # draw.rectangle((x, y, x + a, y + a), fill=(v, v, v))
 
                 m = int(a * 0.4)
                 r = (x + m, y + m, x + a - m, y + a - m)
@@ -146,7 +155,8 @@ class Grid(torch.nn.Module):
                                   (100, 100, int(weight * 255)), int(10 * weight))
                     else:
                         if weight > 0:
-                            draw.rectangle(r2, fill=(100, 100, int(weight * 255)))
+                            c = int(weight * 255 / abs(node.influx))
+                            draw.rectangle(r2, fill=(c, c, c))
 
                 if node.influx < 0:
                     draw.rectangle(r, fill=(int(- 255 * node.influx), 0, 0))
